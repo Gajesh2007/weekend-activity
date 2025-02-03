@@ -1,3 +1,9 @@
+"""Alembic migrations environment configuration.
+
+This module configures the database migration environment for Alembic,
+setting up logging, database connections, and migration execution modes.
+"""
+
 import os
 from logging.config import fileConfig
 
@@ -17,7 +23,10 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Get database URL from environment or use default
-database_url = os.getenv("DATABASE_URL", "sqlite:///weekend_activity.db")
+database_url = os.getenv(
+    "DATABASE_URL",
+    "sqlite:///weekend_activity.db",
+)
 config.set_main_option("sqlalchemy.url", database_url)
 
 

@@ -100,9 +100,7 @@ def format_diff_for_prompt(diff_data: List[Dict[str, Any]]) -> str:
     formatted = []
     for file in diff_data:
         formatted.append(f"File: {file.get('filename')}")
-        formatted.append(
-            f"Changes: +{file.get('additions')} -{file.get('deletions')}"
-        )
+        formatted.append(f"Changes: +{file.get('additions')} -{file.get('deletions')}")
         if file.get("patch"):
             formatted.append("Diff:")
             formatted.append(file.get("patch"))

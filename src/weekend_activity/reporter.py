@@ -153,9 +153,7 @@ class ActivityReporter:
                     lines.append(f"    - <{pr.url}|{pr.title}>")
                     if pr.summary:
                         lines.append(f"      _{pr.summary.summary}_")
-                        lines.append(
-                            f"      Impact: {pr.summary.impact_level.upper()}"
-                        )
+                        lines.append(f"      Impact: {pr.summary.impact_level.upper()}")
 
         return "\n".join(lines)
 

@@ -20,4 +20,4 @@ summary:
   max_commits_per_user: 10
   max_prs_per_user: 5
   include_commit_messages: true
-  include_pr_titles: true 
+  include_pr_titles: true

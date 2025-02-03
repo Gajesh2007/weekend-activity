@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,7 +12,7 @@ from weekend_activity.tracker import WeekendActivityTracker
 
 
 @pytest.fixture
-def tracker():
+def tracker() -> Generator[WeekendActivityTracker, None, None]:
     """Create a tracker instance with test configuration."""
     config = {
         "repositories": [{"owner": "test-org", "repo": "test-repo"}],
@@ -37,7 +38,7 @@ def tracker():
         yield tracker
 
 
-def test_is_weekend():
+def test_is_weekend() -> None:
     """Test weekend detection logic."""
     tracker = WeekendActivityTracker()
 
@@ -54,7 +55,7 @@ def test_is_weekend():
     assert tracker.is_weekend(monday) is False
 
 
-def test_get_date_range(tracker):
+def test_get_date_range(tracker: WeekendActivityTracker) -> None:
     """Test date range calculation for different scenarios."""
     # Test Monday
     monday = datetime(2024, 2, 5, 9, 0, tzinfo=pytz.UTC)
@@ -72,7 +73,7 @@ def test_get_date_range(tracker):
     assert (end - start).days == 2
 
 
-def test_generate_text_summary(tracker):
+def test_generate_text_summary(tracker: WeekendActivityTracker) -> None:
     """Test plain text summary generation."""
     activity = {
         "commits": {
@@ -108,7 +109,7 @@ def test_generate_text_summary(tracker):
     assert "https://github.com/test/pr/1" in summary
 
 
-def test_generate_slack_summary(tracker):
+def test_generate_slack_summary(tracker: WeekendActivityTracker) -> None:
     """Test Slack-formatted summary generation."""
     activity = {
         "commits": {
@@ -142,7 +143,7 @@ def test_generate_slack_summary(tracker):
     assert "<https://github.com/test/pr/1|Test PR>" in summary
 
 
-def test_empty_summary(tracker):
+def test_empty_summary(tracker: WeekendActivityTracker) -> None:
     """Test summary generation with no activity."""
     activity = {
         "commits": {},
@@ -154,7 +155,7 @@ def test_empty_summary(tracker):
     assert "No weekend activity to report" in summary
 
 
-def test_slack_notification(tracker):
+def test_slack_notification(tracker: WeekendActivityTracker) -> None:
     """Test Slack notification sending."""
     with patch("requests.post") as mock_post:
         mock_post.return_value.raise_for_status = MagicMock()
@@ -170,7 +171,7 @@ def test_slack_notification(tracker):
             assert kwargs["json"]["text"] == "Test message"
 
 
-def test_slack_notification_missing_webhook(tracker):
+def test_slack_notification_missing_webhook(tracker: WeekendActivityTracker) -> None:
     """Test Slack notification with missing webhook URL."""
     with patch.dict(os.environ, {}, clear=True):
         with pytest.raises(ValueError):
