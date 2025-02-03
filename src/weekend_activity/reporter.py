@@ -1,7 +1,7 @@
 """Activity reporting module."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TypedDict
 
 from rich.console import Console
 from sqlalchemy.orm import Session
@@ -18,10 +18,17 @@ from weekend_activity.models import (
 console = Console()
 
 
+class UserActivity(TypedDict):
+    """Type for user activity data."""
+
+    commits: List[Commit]
+    prs: List[PullRequest]
+
+
 class ActivityReporter:
     """Generates activity reports."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize reporter."""
         pass
 
@@ -50,7 +57,10 @@ class ActivityReporter:
         return "\n".join(lines)
 
     def generate_text_report(
-        self, start_date: datetime, end_date: datetime, activity: Dict[str, List]
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        activity: Dict[str, List[Commit | PullRequest]],
     ) -> str:
         """Generate a text report of weekend activity."""
         lines = [
@@ -59,7 +69,7 @@ class ActivityReporter:
         ]
 
         # Group by user
-        user_activity: Dict[str, Dict] = {}
+        user_activity: Dict[str, UserActivity] = {}
 
         # Process commits
         for commit in activity["commits"]:
@@ -93,7 +103,10 @@ class ActivityReporter:
         return "\n".join(lines)
 
     def generate_slack_report(
-        self, start_date: datetime, end_date: datetime, activity: Dict[str, List]
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        activity: Dict[str, List[Commit | PullRequest]],
     ) -> str:
         """Generate a Slack-formatted report of weekend activity."""
         lines = [
@@ -102,7 +115,7 @@ class ActivityReporter:
         ]
 
         # Group by user
-        user_activity: Dict[str, Dict] = {}
+        user_activity: Dict[str, UserActivity] = {}
 
         # Process commits
         for commit in activity["commits"]:
@@ -140,7 +153,9 @@ class ActivityReporter:
                     lines.append(f"    - <{pr.url}|{pr.title}>")
                     if pr.summary:
                         lines.append(f"      _{pr.summary.summary}_")
-                        lines.append(f"      Impact: {pr.summary.impact_level.upper()}")
+                        lines.append(
+                            f"      Impact: {pr.summary.impact_level.upper()}"
+                        )
 
         return "\n".join(lines)
 

@@ -1,7 +1,7 @@
 """Slack integration module."""
 
 import os
-from typing import Dict, Optional
+from typing import Optional
 
 import requests
 from rich.console import Console
@@ -12,7 +12,7 @@ console = Console()
 class SlackNotifier:
     """Handles sending notifications to Slack."""
 
-    def __init__(self, webhook_url: Optional[str] = None):
+    def __init__(self, webhook_url: Optional[str] = None) -> None:
         """Initialize the notifier with a webhook URL."""
         self.webhook_url = webhook_url or os.getenv("SLACK_WEBHOOK_URL")
         if not self.webhook_url:
@@ -42,11 +42,9 @@ class SlackNotifier:
             if response.status_code == 200:
                 console.print("[green]Successfully sent report to Slack[/green]")
                 return True
-            else:
-                console.print(
-                    f"[red]Failed to send report to Slack: {response.text}[/red]"
-                )
-                return False
+
+            console.print(f"[red]Failed to send report to Slack: {response.text}[/red]")
+            return False
 
         except Exception as e:
             console.print(f"[red]Error sending report to Slack: {str(e)}[/red]")

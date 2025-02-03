@@ -2,20 +2,14 @@
 
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from github import Github, GithubException
 from rich.console import Console
 from sqlalchemy.orm import Session
 
 from weekend_activity.db import get_db
-from weekend_activity.models import (
-    Commit,
-    CommitSummary,
-    PullRequest,
-    PullRequestSummary,
-    Repository,
-)
+from weekend_activity.models import Commit, PullRequest, Repository
 from weekend_activity.summarizer import summarize_commit, summarize_pr
 
 console = Console()
@@ -24,7 +18,7 @@ console = Console()
 class GitHubManager:
     """Manages GitHub repository interactions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize with GitHub token."""
         self.github = Github(os.getenv("GITHUB_TOKEN"))
 
@@ -36,7 +30,11 @@ class GitHubManager:
 
             if not repo:
                 # Create new repository record
-                repo = Repository(owner=owner, name=name, full_name=f"{owner}/{name}")
+                repo = Repository(
+                    owner=owner,
+                    name=name,
+                    full_name=f"{owner}/{name}",
+                )
                 db.add(repo)
                 db.commit()
                 db.refresh(repo)
@@ -44,19 +42,22 @@ class GitHubManager:
             return repo
 
         except Exception as e:
-            console.print(
-                f"[red]Error syncing repository {owner}/{name}: {str(e)}[/red]"
-            )
+            msg = f"Error syncing repository {owner}/{name}: {str(e)}"
+            console.print(f"[red]{msg}[/red]")
             raise
 
     def fetch_weekend_activity(
-        self, repo: Repository, start_date: datetime, end_date: datetime, db: Session
+        self,
+        repo: Repository,
+        start_date: datetime,
+        end_date: datetime,
+        db: Session,
     ) -> Tuple[List[Commit], List[PullRequest]]:
         """Fetch weekend activity for a repository."""
         try:
             gh_repo = self.github.get_repo(repo.full_name)
-            commits = []
-            pull_requests = []
+            commits: List[Commit] = []
+            pull_requests: List[PullRequest] = []
 
             # Fetch commits
             gh_commits = gh_repo.get_commits(since=start_date, until=end_date)
@@ -89,7 +90,11 @@ class GitHubManager:
                             db.add(summary)
 
             # Fetch pull requests
-            gh_prs = gh_repo.get_pulls(state="all", sort="created", direction="desc")
+            gh_prs = gh_repo.get_pulls(
+                state="all",
+                sort="created",
+                direction="desc",
+            )
             for gh_pr in gh_prs:
                 if gh_pr.created_at < start_date:
                     break
@@ -130,27 +135,35 @@ class GitHubManager:
             return commits, pull_requests
 
         except GithubException as e:
-            console.print(f"[red]GitHub API error for {repo.full_name}: {str(e)}[/red]")
+            msg = f"GitHub API error for {repo.full_name}: {str(e)}"
+            console.print(f"[red]{msg}[/red]")
             raise
         except Exception as e:
-            console.print(
-                f"[red]Error fetching activity for {repo.full_name}: {str(e)}[/red]"
-            )
+            msg = f"Error fetching activity for {repo.full_name}: {str(e)}"
+            console.print(f"[red]{msg}[/red]")
             raise
 
     def get_activity_summary(
-        self, start_date: datetime, end_date: datetime
-    ) -> Dict[str, List]:
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> Dict[str, List[Commit | PullRequest]]:
         """Get summary of all weekend activity."""
         with get_db() as db:
             # Get all repositories
             repos = db.query(Repository).all()
 
-            all_activity = {"commits": [], "pull_requests": []}
+            all_activity: Dict[str, List[Commit | PullRequest]] = {
+                "commits": [],
+                "pull_requests": [],
+            }
 
             for repo in repos:
                 commits, prs = self.fetch_weekend_activity(
-                    repo, start_date, end_date, db
+                    repo,
+                    start_date,
+                    end_date,
+                    db,
                 )
                 all_activity["commits"].extend(commits)
                 all_activity["pull_requests"].extend(prs)

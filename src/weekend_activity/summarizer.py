@@ -1,7 +1,7 @@
 """AI-powered code summarization module."""
 
 import os
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 from rich.console import Console
@@ -56,7 +56,7 @@ IMPACT: <impact level>
 """
 
 
-def get_commit_diff(commit: Commit) -> str:
+def get_commit_diff(commit: Commit) -> List[Dict[str, Any]]:
     """Get the diff for a commit using GitHub API."""
     try:
         # Access the repository through SQLAlchemy relationship
@@ -68,22 +68,31 @@ def get_commit_diff(commit: Commit) -> str:
         console.print(
             f"[red]Error fetching diff for commit {commit.sha}: {str(e)}[/red]"
         )
-        return ""
+        return []
 
 
-def get_pr_diff(pr: PullRequest) -> str:
+def get_pr_diff(pr: PullRequest) -> List[Dict[str, Any]]:
     """Get the diff for a pull request using GitHub API."""
     try:
         repo = pr.repository
         gh_repo = repo.github_client.get_repo(f"{repo.owner}/{repo.name}")
         gh_pr = gh_repo.get_pull(pr.number)
-        return gh_pr.get_files()
+        files = gh_pr.get_files()
+        return [
+            {
+                "filename": f.filename,
+                "additions": f.additions,
+                "deletions": f.deletions,
+                "patch": f.patch,
+            }
+            for f in files
+        ]
     except Exception as e:
         console.print(f"[red]Error fetching diff for PR #{pr.number}: {str(e)}[/red]")
-        return ""
+        return []
 
 
-def format_diff_for_prompt(diff_data: Dict) -> str:
+def format_diff_for_prompt(diff_data: List[Dict[str, Any]]) -> str:
     """Format diff data into a readable string for the AI prompt."""
     if not diff_data:
         return "No changes available"
@@ -91,7 +100,9 @@ def format_diff_for_prompt(diff_data: Dict) -> str:
     formatted = []
     for file in diff_data:
         formatted.append(f"File: {file.get('filename')}")
-        formatted.append(f"Changes: +{file.get('additions')} -{file.get('deletions')}")
+        formatted.append(
+            f"Changes: +{file.get('additions')} -{file.get('deletions')}"
+        )
         if file.get("patch"):
             formatted.append("Diff:")
             formatted.append(file.get("patch"))
@@ -111,7 +122,7 @@ def summarize_commit(commit: Commit) -> Optional[CommitSummary]:
 
         # Get summary from OpenAI
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a code review assistant."},
                 {"role": "user", "content": prompt},
@@ -134,7 +145,9 @@ def summarize_commit(commit: Commit) -> Optional[CommitSummary]:
                 impact_level = line.replace("IMPACT:", "").strip()
 
         return CommitSummary(
-            commit=commit, summary=summary_text, impact_level=impact_level.lower()
+            commit=commit,
+            summary=summary_text,
+            impact_level=impact_level.lower(),
         )
 
     except Exception as e:
@@ -157,7 +170,7 @@ def summarize_pr(pr: PullRequest) -> Optional[PullRequestSummary]:
 
         # Get summary from OpenAI
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a code review assistant."},
                 {"role": "user", "content": prompt},
@@ -180,7 +193,9 @@ def summarize_pr(pr: PullRequest) -> Optional[PullRequestSummary]:
                 impact_level = line.replace("IMPACT:", "").strip()
 
         return PullRequestSummary(
-            pull_request=pr, summary=summary_text, impact_level=impact_level.lower()
+            pull_request=pr,
+            summary=summary_text,
+            impact_level=impact_level.lower(),
         )
 
     except Exception as e:
