@@ -5,13 +5,14 @@ from datetime import datetime
 from typing import Dict, List, Tuple
 
 from dotenv import load_dotenv
-from github import Github, GithubException
+from github import GithubException
 from rich.console import Console
 from sqlalchemy.orm import Session
 
 from weekend_activity.db import get_db
 from weekend_activity.models import Commit, PullRequest, Repository
 from weekend_activity.summarizer import summarize_commit, summarize_pr
+from weekend_activity.github_client import github
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,19 +24,16 @@ class GitHubManager:
     """Manages GitHub repository interactions."""
 
     def __init__(self) -> None:
-        """Initialize with GitHub token."""
-        token = os.getenv("GITHUB_TOKEN")
-        if not token:
-            raise ValueError(
-                "GITHUB_TOKEN environment variable not set. "
-                "Please ensure you have a .env file with GITHUB_TOKEN set."
-            )
-        self.github = Github(token)
+        """Initialize manager."""
+        pass
 
     def sync_repository(self, owner: str, name: str, db: Session) -> Repository:
         """Sync repository information to database."""
         try:
-            # Check if repository exists
+            # Verify repository exists and is accessible
+            gh_repo = github.get_repo(f"{owner}/{name}")
+            
+            # Check if repository exists in database
             repo = db.query(Repository).filter_by(owner=owner, name=name).first()
 
             if not repo:
@@ -43,7 +41,7 @@ class GitHubManager:
                 repo = Repository(
                     owner=owner,
                     name=name,
-                    full_name=f"{owner}/{name}",
+                    full_name=gh_repo.full_name,
                 )
                 db.add(repo)
                 db.commit()
@@ -51,6 +49,10 @@ class GitHubManager:
 
             return repo
 
+        except GithubException as e:
+            msg = f"GitHub API error for {owner}/{name}: {str(e)}"
+            console.print(f"[red]{msg}[/red]")
+            raise
         except Exception as e:
             msg = f"Error syncing repository {owner}/{name}: {str(e)}"
             console.print(f"[red]{msg}[/red]")
@@ -65,11 +67,19 @@ class GitHubManager:
     ) -> Tuple[List[Commit], List[PullRequest]]:
         """Fetch weekend activity for a repository."""
         try:
-            gh_repo = self.github.get_repo(repo.full_name)
+            gh_repo = github.get_repo(repo.full_name)
             commits: List[Commit] = []
             pull_requests: List[PullRequest] = []
 
+            # Check if OpenAI summaries are enabled
+            ai_enabled = bool(os.getenv("OPENAI_API_KEY"))
+            if ai_enabled:
+                console.print("[blue]AI summaries are enabled - will generate summaries for new activity[/blue]")
+            else:
+                console.print("[yellow]AI summaries are disabled - skipping summary generation[/yellow]")
+
             # Fetch commits
+            console.print(f"[blue]Fetching commits for {repo.full_name}...[/blue]")
             gh_commits = gh_repo.get_commits(since=start_date, until=end_date)
             for gh_commit in gh_commits:
                 if not gh_commit.author:
@@ -79,6 +89,7 @@ class GitHubManager:
                 commit = db.query(Commit).filter_by(sha=gh_commit.sha).first()
 
                 if not commit:
+                    console.print(f"[blue]Found new commit {gh_commit.sha[:7]}[/blue]")
                     # Create new commit record
                     commit = Commit(
                         sha=gh_commit.sha,
@@ -94,12 +105,14 @@ class GitHubManager:
                     commits.append(commit)
 
                     # Generate summary if enabled
-                    if os.getenv("OPENAI_API_KEY"):
+                    if ai_enabled:
+                        console.print(f"[blue]Generating AI summary for commit {gh_commit.sha[:7]}...[/blue]")
                         summary = summarize_commit(commit)
                         if summary:
                             db.add(summary)
 
             # Fetch pull requests
+            console.print(f"[blue]Fetching pull requests for {repo.full_name}...[/blue]")
             gh_prs = gh_repo.get_pulls(
                 state="all",
                 sort="created",
@@ -119,6 +132,7 @@ class GitHubManager:
                 )
 
                 if not pr:
+                    console.print(f"[blue]Found new PR #{gh_pr.number}[/blue]")
                     # Create new PR record
                     pr = PullRequest(
                         number=gh_pr.number,
@@ -136,7 +150,8 @@ class GitHubManager:
                     pull_requests.append(pr)
 
                     # Generate summary if enabled
-                    if os.getenv("OPENAI_API_KEY"):
+                    if ai_enabled:
+                        console.print(f"[blue]Generating AI summary for PR #{gh_pr.number}...[/blue]")
                         summary = summarize_pr(pr)
                         if summary:
                             db.add(summary)

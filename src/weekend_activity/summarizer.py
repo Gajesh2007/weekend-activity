@@ -12,11 +12,120 @@ from weekend_activity.models import (
     PullRequest,
     PullRequestSummary,
 )
+from weekend_activity.github_client import github
 
 console = Console()
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    console.print("[yellow]Warning: OPENAI_API_KEY not set. AI summaries will be disabled.[/yellow]")
+else:
+    console.print("[green]OpenAI API key found. AI summaries will be enabled.[/green]")
+client = OpenAI(api_key=openai_api_key) if openai_api_key else None
+
+# Files to ignore in diffs
+IGNORED_FILES = {
+    # Lock files
+    'package-lock.json',
+    'yarn.lock',
+    'pnpm-lock.yaml',
+    'poetry.lock',
+    'Gemfile.lock',
+    'composer.lock',
+    # Build artifacts
+    'dist/',
+    'build/',
+    '.next/',
+    # Dependencies
+    'node_modules/',
+    'vendor/',
+    # Generated files
+    '*.min.js',
+    '*.min.css',
+    # IDE files
+    '.idea/',
+    '.vscode/',
+    # Misc
+    '.DS_Store',
+    'Thumbs.db',
+}
+
+def should_include_file(filename: str) -> bool:
+    """Check if a file should be included in the diff."""
+    # Check exact matches
+    if filename in IGNORED_FILES:
+        return False
+        
+    # Check directory patterns
+    for pattern in IGNORED_FILES:
+        if pattern.endswith('/') and filename.startswith(pattern):
+            return False
+            
+    # Check file extensions
+    if any(pattern[1:] in filename for pattern in IGNORED_FILES if pattern.startswith('*.')):
+        return False
+        
+    return True
+
+def format_diff_for_prompt(diff_data: List[Dict[str, Any]], max_files: int = 5) -> str:
+    """Format diff data into a readable string for the AI prompt."""
+    if not diff_data:
+        return "No changes available"
+
+    # Filter and sort files by importance
+    relevant_files = [
+        file for file in diff_data 
+        if should_include_file(file.get('filename', ''))
+    ]
+    
+    # Sort files by importance (source code first, then docs, etc.)
+    def file_importance(file: Dict[str, Any]) -> int:
+        filename = file.get('filename', '').lower()
+        if any(ext in filename for ext in ['.py', '.js', '.ts', '.go', '.rs', '.java']):
+            return 0  # Source code
+        if any(ext in filename for ext in ['.md', '.txt', '.rst']):
+            return 1  # Documentation
+        if any(ext in filename for ext in ['.json', '.yaml', '.yml', '.toml']):
+            return 2  # Config files
+        return 3  # Other files
+    
+    relevant_files.sort(key=file_importance)
+    
+    # Take only the most important files
+    selected_files = relevant_files[:max_files]
+    
+    formatted = []
+    total_files = len(relevant_files)
+    if total_files > max_files:
+        formatted.append(f"Note: Showing {max_files} most important files out of {total_files} total files changed.")
+    
+    for file in selected_files:
+        filename = file.get('filename', '')
+        formatted.append(f"\nFile: {filename}")
+        formatted.append(f"Changes: +{file.get('additions')} -{file.get('deletions')}")
+        
+        if file.get('patch'):
+            patch = file.get('patch', '')
+            # Only include the most relevant parts of the patch
+            patch_lines = patch.split('\n')
+            if len(patch_lines) > 50:  # If patch is too long
+                # Take first 20 lines and last 20 lines
+                formatted_patch = '\n'.join([
+                    *patch_lines[:20],
+                    f"\n... {len(patch_lines) - 40} lines omitted ...\n",
+                    *patch_lines[-20:]
+                ])
+            else:
+                formatted_patch = patch
+                
+            formatted.append("Diff:")
+            formatted.append(formatted_patch)
+
+    if not formatted:
+        return "No relevant changes to analyze"
+
+    return "\n".join(formatted)
 
 COMMIT_PROMPT = """
 Analyze this git commit and provide a concise summary:
@@ -61,7 +170,7 @@ def get_commit_diff(commit: Commit) -> List[Dict[str, Any]]:
     try:
         # Access the repository through SQLAlchemy relationship
         repo = commit.repository
-        gh_repo = repo.github_client.get_repo(f"{repo.owner}/{repo.name}")
+        gh_repo = github.get_repo(repo.full_name)
         gh_commit = gh_repo.get_commit(commit.sha)
         return gh_commit.raw_data.get("files", [])
     except Exception as e:
@@ -75,7 +184,7 @@ def get_pr_diff(pr: PullRequest) -> List[Dict[str, Any]]:
     """Get the diff for a pull request using GitHub API."""
     try:
         repo = pr.repository
-        gh_repo = repo.github_client.get_repo(f"{repo.owner}/{repo.name}")
+        gh_repo = github.get_repo(repo.full_name)
         gh_pr = gh_repo.get_pull(pr.number)
         files = gh_pr.get_files()
         return [
@@ -92,41 +201,34 @@ def get_pr_diff(pr: PullRequest) -> List[Dict[str, Any]]:
         return []
 
 
-def format_diff_for_prompt(diff_data: List[Dict[str, Any]]) -> str:
-    """Format diff data into a readable string for the AI prompt."""
-    if not diff_data:
-        return "No changes available"
-
-    formatted = []
-    for file in diff_data:
-        formatted.append(f"File: {file.get('filename')}")
-        formatted.append(f"Changes: +{file.get('additions')} -{file.get('deletions')}")
-        if file.get("patch"):
-            formatted.append("Diff:")
-            formatted.append(file.get("patch"))
-        formatted.append("")
-
-    return "\n".join(formatted)
-
-
 def summarize_commit(commit: Commit) -> Optional[CommitSummary]:
     """Generate an AI summary for a commit."""
+    if not client:
+        console.print("[yellow]Skipping commit summary: OpenAI API key not set[/yellow]")
+        return None
+        
     try:
+        console.print(f"[blue]Fetching diff for commit {commit.sha[:7]}...[/blue]")
         diff = get_commit_diff(commit)
         formatted_diff = format_diff_for_prompt(diff)
 
+        if not diff:
+            console.print(f"[yellow]No diff available for commit {commit.sha[:7]}. Skipping summary.[/yellow]")
+            return None
+
         # Prepare the prompt
         prompt = COMMIT_PROMPT.format(message=commit.message, diff=formatted_diff)
+        
+        console.print(f"[blue]Requesting OpenAI summary for commit {commit.sha[:7]}...[/blue]")
 
         # Get summary from OpenAI
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",  # Using a more widely available model
             messages=[
                 {"role": "system", "content": "You are a code review assistant."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.7,
-            max_tokens=200,
+            temperature=0.7
         )
 
         # Parse response
@@ -141,6 +243,14 @@ def summarize_commit(commit: Commit) -> Optional[CommitSummary]:
                 summary_text = line.replace("SUMMARY:", "").strip()
             elif line.startswith("IMPACT:"):
                 impact_level = line.replace("IMPACT:", "").strip()
+
+        if not summary_text:
+            console.print(f"[yellow]Warning: Could not parse AI summary response for commit {commit.sha[:7]}[/yellow]")
+            return None
+
+        console.print(f"[green]Successfully generated AI summary for commit {commit.sha[:7]}:[/green]")
+        console.print(f"[green]Summary: {summary_text}[/green]")
+        console.print(f"[green]Impact: {impact_level}[/green]")
 
         return CommitSummary(
             commit=commit,
@@ -149,15 +259,24 @@ def summarize_commit(commit: Commit) -> Optional[CommitSummary]:
         )
 
     except Exception as e:
-        console.print(f"[red]Error summarizing commit {commit.sha}: {str(e)}[/red]")
+        console.print(f"[red]Error summarizing commit {commit.sha[:7]}: {str(e)}[/red]")
         return None
 
 
 def summarize_pr(pr: PullRequest) -> Optional[PullRequestSummary]:
     """Generate an AI summary for a pull request."""
+    if not client:
+        console.print("[yellow]Skipping PR summary: OpenAI API key not set[/yellow]")
+        return None
+        
     try:
+        console.print(f"[blue]Fetching diff for PR #{pr.number}...[/blue]")
         diff = get_pr_diff(pr)
         formatted_diff = format_diff_for_prompt(diff)
+
+        if not diff:
+            console.print(f"[yellow]No diff available for PR #{pr.number}. Skipping summary.[/yellow]")
+            return None
 
         # Prepare the prompt
         prompt = PR_PROMPT.format(
@@ -166,15 +285,16 @@ def summarize_pr(pr: PullRequest) -> Optional[PullRequestSummary]:
             diff=formatted_diff,
         )
 
+        console.print(f"[blue]Requesting OpenAI summary for PR #{pr.number}...[/blue]")
+
         # Get summary from OpenAI
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",  # Using a more widely available model
             messages=[
                 {"role": "system", "content": "You are a code review assistant."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.7,
-            max_tokens=300,
+            temperature=0.7
         )
 
         # Parse response
@@ -189,6 +309,14 @@ def summarize_pr(pr: PullRequest) -> Optional[PullRequestSummary]:
                 summary_text = line.replace("SUMMARY:", "").strip()
             elif line.startswith("IMPACT:"):
                 impact_level = line.replace("IMPACT:", "").strip()
+
+        if not summary_text:
+            console.print(f"[yellow]Warning: Could not parse AI summary response for PR #{pr.number}[/yellow]")
+            return None
+
+        console.print(f"[green]Successfully generated AI summary for PR #{pr.number}:[/green]")
+        console.print(f"[green]Summary: {summary_text}[/green]")
+        console.print(f"[green]Impact: {impact_level}[/green]")
 
         return PullRequestSummary(
             pull_request=pr,

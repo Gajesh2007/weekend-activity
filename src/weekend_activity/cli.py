@@ -1,20 +1,27 @@
 """Command-line interface for the weekend activity tracker."""
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 import click
 from dotenv import load_dotenv
 from rich.console import Console
+import yaml
 
 from weekend_activity.tracker import WeekendActivityTracker
+from weekend_activity.db import init_db
+from weekend_activity.repository import GitHubManager
+from weekend_activity.reporter import ActivityReporter
 
 # Load environment variables from .env file
 load_dotenv()
 
 console = Console()
+
+# Initialize database on module import
+init_db()
 
 
 def validate_date(
@@ -89,8 +96,7 @@ def report(
         start_date, end_date = tracker.get_date_range(date)
 
         console.print(
-            "Fetching activity from "
-            f"{start_date.date()} to {end_date.date()}..."
+            "Fetching activity from " f"{start_date.date()} to {end_date.date()}..."
         )
 
         activity = tracker.fetch_activity(start_date, end_date)
@@ -124,8 +130,7 @@ def add_repo(repo: str, config: str) -> None:
     try:
         if "/" not in repo:
             raise click.BadParameter(
-                "Repository must be in owner/name format "
-                "(e.g., octocat/Hello-World)"
+                "Repository must be in owner/name format " "(e.g., octocat/Hello-World)"
             )
 
         owner, name = repo.split("/")

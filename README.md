@@ -6,6 +6,7 @@ A bot that tracks weekend activity (commits, PRs) on specified GitHub repositori
 
 - Track commits and PRs made during weekends (Saturday and Sunday)
 - Generate a Monday morning summary of weekend activities
+- AI-powered summaries of commits and PRs with impact assessment
 - Send notifications to Slack with contributor shoutouts
 - Support for monitoring multiple GitHub repositories
 - Simple time zone handling (initially using UTC)
@@ -30,6 +31,14 @@ A bot that tracks weekend activity (commits, PRs) on specified GitHub repositori
    ```bash
    export GITHUB_TOKEN=your_github_token
    export SLACK_WEBHOOK_URL=your_slack_webhook_url  # Optional, for Slack notifications
+   export OPENAI_API_KEY=your_openai_api_key  # Required for AI-powered summaries
+   ```
+
+   Or create a `.env` file:
+   ```
+   GITHUB_TOKEN=your_github_token
+   SLACK_WEBHOOK_URL=your_slack_webhook_url  # Optional
+   OPENAI_API_KEY=your_openai_api_key  # Must be a regular API key starting with 'sk-'
    ```
 
 2. Create a `config.yaml` file with your repositories:
@@ -50,6 +59,25 @@ A bot that tracks weekend activity (commits, PRs) on specified GitHub repositori
      include_commit_messages: true
      include_pr_titles: true
    ```
+
+## Database Setup
+
+The application uses SQLite as its database. Follow these steps to set up the database:
+
+1. Initialize the database and create tables:
+   ```bash
+   poetry run alembic upgrade head
+   ```
+
+This will create a `weekend_activity.db` file in your project directory with the following tables:
+- `repositories`: Tracked GitHub repositories
+- `commits`: Weekend commits from tracked repositories
+- `pull_requests`: Weekend pull requests from tracked repositories
+- `commit_summaries`: AI-generated summaries of commits
+- `pr_summaries`: AI-generated summaries of pull requests
+- `weekend_reports`: Generated weekend activity reports
+
+The database will be automatically populated as you run the tracker and generate reports.
 
 ## Usage
 

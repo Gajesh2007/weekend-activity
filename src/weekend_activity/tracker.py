@@ -10,8 +10,11 @@ import pytz
 import requests
 import yaml
 from dateutil import parser
-from github import Github
 from rich.console import Console
+
+from weekend_activity.repository import GitHubManager
+from weekend_activity.db import get_db
+from weekend_activity.github_client import github
 
 console = Console()
 
@@ -19,16 +22,34 @@ console = Console()
 class WeekendActivityTracker:
     """Track weekend activity on GitHub repositories."""
 
-    def __init__(self, config_path: str = "config.yaml"):
-        """Initialize the tracker with configuration."""
-        self.config = self._load_config(config_path)
-        self.github = Github(os.getenv("GITHUB_TOKEN"))
-        self.timezone = pytz.timezone(self.config["timezone"])
+    def __init__(self, config_path: str = "config.yaml") -> None:
+        """Initialize the tracker.
 
-    def _load_config(self, config_path: str) -> dict:
-        """Load configuration from YAML file."""
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f)
+        Args:
+            config_path: Path to configuration file
+        """
+        # Initialize GitHub manager
+        self.github_manager = GitHubManager()
+        
+        # Load configuration
+        try:
+            with open(config_path) as f:
+                self.config = yaml.safe_load(f)
+        except FileNotFoundError:
+            self.config = {"repositories": []}
+
+        # Ensure required config sections exist
+        if "repositories" not in self.config:
+            self.config["repositories"] = []
+        if "summary" not in self.config:
+            self.config["summary"] = {
+                "max_commits_per_user": 10,
+                "max_prs_per_user": 5,
+                "include_commit_messages": True,
+                "include_pr_titles": True,
+            }
+
+        self.timezone = pytz.timezone(self.config.get("timezone", "UTC"))
 
     def is_weekend(self, dt: datetime) -> bool:
         """Check if the given datetime falls on a weekend."""
@@ -69,57 +90,59 @@ class WeekendActivityTracker:
             "period": {"start": start_date.isoformat(), "end": end_date.isoformat()},
         }
 
-        for repo_config in self.config["repositories"]:
-            repo = self.github.get_repo(f"{repo_config['owner']}/{repo_config['repo']}")
-            console.log(f"Fetching activity for {repo.full_name}...")
-
-            # Fetch commits
-            commits = repo.get_commits(since=start_date, until=end_date)
-            for commit in commits:
-                if not commit.author:
-                    continue
-
-                commit_time = parser.parse(commit.last_modified)
-                if not self.is_weekend(commit_time):
-                    continue
-
-                username = commit.author.login
-                if username not in activity["commits"]:
-                    activity["commits"][username] = []
-
-                activity["commits"][username].append(
-                    {
-                        "message": commit.commit.message,
-                        "url": commit.html_url,
-                        "repo": repo.full_name,
-                        "timestamp": commit_time.isoformat(),
-                    }
+        with get_db() as db:
+            for repo_config in self.config["repositories"]:
+                # Sync repository to database
+                repo = self.github_manager.sync_repository(
+                    repo_config["owner"],
+                    repo_config["repo"],
+                    db,
+                )
+                
+                # Fetch activity using GitHubManager
+                commits, prs = self.github_manager.fetch_weekend_activity(
+                    repo,
+                    start_date,
+                    end_date,
+                    db,
                 )
 
-            # Fetch PRs
-            prs = repo.get_pulls(state="all", sort="created", direction="desc")
-            for pr in prs:
-                created_at = pr.created_at.replace(tzinfo=pytz.UTC)
-                if created_at < start_date:
-                    break
-                if created_at >= end_date:
-                    continue
-                if not self.is_weekend(created_at):
-                    continue
+                # Process commits
+                for commit in commits:
+                    if not self.is_weekend(commit.committed_at):
+                        continue
 
-                username = pr.user.login
-                if username not in activity["prs"]:
-                    activity["prs"][username] = []
+                    username = commit.author_username
+                    if username not in activity["commits"]:
+                        activity["commits"][username] = []
 
-                activity["prs"][username].append(
-                    {
-                        "title": pr.title,
-                        "url": pr.html_url,
-                        "repo": repo.full_name,
-                        "timestamp": created_at.isoformat(),
-                        "state": pr.state,
-                    }
-                )
+                    activity["commits"][username].append(
+                        {
+                            "message": commit.message,
+                            "url": commit.url,
+                            "repo": commit.repository.full_name,
+                            "timestamp": commit.committed_at.isoformat(),
+                        }
+                    )
+
+                # Process PRs
+                for pr in prs:
+                    if not self.is_weekend(pr.created_at):
+                        continue
+
+                    username = pr.author_username
+                    if username not in activity["prs"]:
+                        activity["prs"][username] = []
+
+                    activity["prs"][username].append(
+                        {
+                            "title": pr.title,
+                            "url": pr.url,
+                            "repo": pr.repository.full_name,
+                            "timestamp": pr.created_at.isoformat(),
+                            "state": pr.state,
+                        }
+                    )
 
         return activity
 
