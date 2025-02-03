@@ -10,9 +10,9 @@ from rich.console import Console
 from sqlalchemy.orm import Session
 
 from weekend_activity.db import get_db
+from weekend_activity.github_client import github
 from weekend_activity.models import Commit, PullRequest, Repository
 from weekend_activity.summarizer import summarize_commit, summarize_pr
-from weekend_activity.github_client import github
 
 # Load environment variables from .env file
 load_dotenv()
@@ -32,7 +32,7 @@ class GitHubManager:
         try:
             # Verify repository exists and is accessible
             gh_repo = github.get_repo(f"{owner}/{name}")
-            
+
             # Check if repository exists in database
             repo = db.query(Repository).filter_by(owner=owner, name=name).first()
 
@@ -74,9 +74,13 @@ class GitHubManager:
             # Check if OpenAI summaries are enabled
             ai_enabled = bool(os.getenv("OPENAI_API_KEY"))
             if ai_enabled:
-                console.print("[blue]AI summaries are enabled - will generate summaries for new activity[/blue]")
+                console.print(
+                    "[blue]AI summaries are enabled - will generate summaries for new activity[/blue]"
+                )
             else:
-                console.print("[yellow]AI summaries are disabled - skipping summary generation[/yellow]")
+                console.print(
+                    "[yellow]AI summaries are disabled - skipping summary generation[/yellow]"
+                )
 
             # Fetch commits
             console.print(f"[blue]Fetching commits for {repo.full_name}...[/blue]")
@@ -106,13 +110,17 @@ class GitHubManager:
 
                     # Generate summary if enabled
                     if ai_enabled:
-                        console.print(f"[blue]Generating AI summary for commit {gh_commit.sha[:7]}...[/blue]")
+                        console.print(
+                            f"[blue]Generating AI summary for commit {gh_commit.sha[:7]}...[/blue]"
+                        )
                         summary = summarize_commit(commit)
                         if summary:
                             db.add(summary)
 
             # Fetch pull requests
-            console.print(f"[blue]Fetching pull requests for {repo.full_name}...[/blue]")
+            console.print(
+                f"[blue]Fetching pull requests for {repo.full_name}...[/blue]"
+            )
             gh_prs = gh_repo.get_pulls(
                 state="all",
                 sort="created",
@@ -151,7 +159,9 @@ class GitHubManager:
 
                     # Generate summary if enabled
                     if ai_enabled:
-                        console.print(f"[blue]Generating AI summary for PR #{gh_pr.number}...[/blue]")
+                        console.print(
+                            f"[blue]Generating AI summary for PR #{gh_pr.number}...[/blue]"
+                        )
                         summary = summarize_pr(pr)
                         if summary:
                             db.add(summary)

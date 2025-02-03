@@ -6,14 +6,14 @@ from pathlib import Path
 from typing import Optional
 
 import click
+import yaml
 from dotenv import load_dotenv
 from rich.console import Console
-import yaml
 
-from weekend_activity.tracker import WeekendActivityTracker
 from weekend_activity.db import init_db
-from weekend_activity.repository import GitHubManager
 from weekend_activity.reporter import ActivityReporter
+from weekend_activity.repository import GitHubManager
+from weekend_activity.tracker import WeekendActivityTracker
 
 # Load environment variables from .env file
 load_dotenv()

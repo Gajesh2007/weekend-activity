@@ -12,9 +12,9 @@ import yaml
 from dateutil import parser
 from rich.console import Console
 
-from weekend_activity.repository import GitHubManager
 from weekend_activity.db import get_db
 from weekend_activity.github_client import github
+from weekend_activity.repository import GitHubManager
 
 console = Console()
 
@@ -30,7 +30,7 @@ class WeekendActivityTracker:
         """
         # Initialize GitHub manager
         self.github_manager = GitHubManager()
-        
+
         # Load configuration
         try:
             with open(config_path) as f:
@@ -98,7 +98,7 @@ class WeekendActivityTracker:
                     repo_config["repo"],
                     db,
                 )
-                
+
                 # Fetch activity using GitHubManager
                 commits, prs = self.github_manager.fetch_weekend_activity(
                     repo,
