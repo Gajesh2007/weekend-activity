@@ -1,25 +1,40 @@
-"""
-Command-line interface for the Weekend Activity Tracker.
-"""
+"""Command-line interface for the weekend activity tracker."""
 
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import click
-import pytz
-import yaml
+from dotenv import load_dotenv
 from rich.console import Console
 
-from .tracker import WeekendActivityTracker
+from weekend_activity.tracker import WeekendActivityTracker
+
+# Load environment variables from .env file
+load_dotenv()
 
 console = Console()
 
 
-def validate_date(ctx, param, value: Optional[str]) -> Optional[datetime]:
-    """Validate and parse date string."""
-    if value is None:
+def validate_date(
+    ctx: click.Context,
+    param: click.Parameter,
+    value: Optional[str],
+) -> Optional[datetime]:
+    """Validate and parse date parameter.
+
+    Args:
+        ctx: Click context
+        param: Click parameter
+        value: Date string in YYYY-MM-DD format
+
+    Returns:
+        Parsed datetime object or None
+    """
+    if not value:
         return None
+
     try:
         return datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
@@ -27,106 +42,108 @@ def validate_date(ctx, param, value: Optional[str]) -> Optional[datetime]:
 
 
 @click.group()
-def cli():
-    """Weekend Activity Tracker - Monitor GitHub activity during weekends."""
+def cli() -> None:
+    """Track and summarize weekend GitHub activity."""
     pass
 
 
 @cli.command()
 @click.option(
     "--date",
-    type=str,
-    help="Target date in YYYY-MM-DD format. Defaults to today.",
+    help="Target date (YYYY-MM-DD format)",
     callback=validate_date,
 )
 @click.option(
     "--config",
     type=click.Path(exists=True),
-    default="config.yaml",
     help="Path to config file",
+    default="config.yaml",
 )
 @click.option(
     "--format",
     type=click.Choice(["text", "slack"]),
-    default="text",
     help="Output format",
+    default="text",
 )
 @click.option(
     "--notify/--no-notify",
+    help="Send to Slack",
     default=False,
-    help="Send to Slack (requires SLACK_WEBHOOK_URL)",
 )
-def report(date: Optional[str], config: str, format: str, notify: bool):
-    """Generate a report of weekend activity."""
+def report(
+    date: Optional[datetime],
+    config: str,
+    format: str,
+    notify: bool,
+) -> None:
+    """Generate an activity report for the specified weekend."""
     if not os.getenv("GITHUB_TOKEN"):
-        console.print("[red]Error: GITHUB_TOKEN environment variable not set[/red]")
-        return
+        console.print(
+            "[red]Error: GITHUB_TOKEN environment variable not set. "
+            "Please ensure you have a .env file with GITHUB_TOKEN set.[/red]"
+        )
+        raise click.Abort()
 
     try:
-        tracker = WeekendActivityTracker(config)
+        tracker = WeekendActivityTracker(config_path=config)
         start_date, end_date = tracker.get_date_range(date)
 
         console.print(
-            f"[yellow]Analyzing weekend activity for {start_date.date()} to {end_date.date()}[/yellow]"
+            "Fetching activity from "
+            f"{start_date.date()} to {end_date.date()}..."
         )
 
         activity = tracker.fetch_activity(start_date, end_date)
         summary = tracker.generate_summary(activity, format=format)
 
         if notify and format == "slack":
-            if not os.getenv("SLACK_WEBHOOK_URL"):
-                console.print(
-                    "[red]Error: SLACK_WEBHOOK_URL environment variable not set[/red]"
-                )
-                return
             tracker.send_slack_notification(summary)
-            console.print("[green]Summary sent to Slack![/green]")
         else:
-            console.print("\n[bold]Weekend Activity Summary[/bold]")
             console.print(summary)
 
     except Exception as e:
         console.print(f"[red]Error: {str(e)}[/red]")
+        raise click.Abort()
 
 
 @cli.command()
-@click.argument("repo", required=True)
+@click.argument("repo")
 @click.option(
     "--config",
-    type=click.Path(exists=True),
-    default="config.yaml",
+    type=click.Path(),
     help="Path to config file",
+    default="config.yaml",
 )
-def add_repo(repo: str, config: str):
-    """Add a repository to track (format: owner/repo)."""
+def add_repo(repo: str, config: str) -> None:
+    """Add a repository to track.
+
+    Args:
+        repo: Repository in owner/name format
+        config: Path to config file
+    """
     try:
-        owner, repo_name = repo.split("/")
-    except ValueError:
-        console.print("[red]Error: Repository must be in format owner/repo[/red]")
-        return
+        if "/" not in repo:
+            raise click.BadParameter(
+                "Repository must be in owner/name format "
+                "(e.g., octocat/Hello-World)"
+            )
 
-    try:
-        with open(config, "r") as f:
-            config_data = yaml.safe_load(f)
+        owner, name = repo.split("/")
+        config_path = Path(config)
 
-        if "repositories" not in config_data:
-            config_data["repositories"] = []
+        if not config_path.exists():
+            config_path.write_text("repositories: []\n")
 
-        new_repo = {"owner": owner, "repo": repo_name}
-        if new_repo not in config_data["repositories"]:
-            config_data["repositories"].append(new_repo)
+        tracker = WeekendActivityTracker(config_path=str(config_path))
+        tracker.add_repository(owner, name)
 
-            with open(config, "w") as f:
-                yaml.dump(config_data, f, default_flow_style=False)
-
-            console.print(f"[green]Added {repo} to tracked repositories[/green]")
-        else:
-            console.print("[yellow]Repository already being tracked[/yellow]")
+        console.print(f"[green]Added repository {repo} to tracking list[/green]")
 
     except Exception as e:
         console.print(f"[red]Error: {str(e)}[/red]")
+        raise click.Abort()
 
 
-def main():
-    """Main entry point for the CLI."""
+def main() -> None:
+    """Run the CLI application."""
     cli()

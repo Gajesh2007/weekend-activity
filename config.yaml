@@ -3,8 +3,8 @@
 
 # List of repositories to track
 repositories:
-  - owner: "Gajesh2007"    # GitHub organization or username
-    repo: "weekend-activity"    # Repository name
+  - owner: "Layr-Labs"    # GitHub organization or username
+    repo: "eigenda-proxy"    # Repository name
 
 # Timezone for weekend detection (IANA timezone names)
 timezone: "UTC"

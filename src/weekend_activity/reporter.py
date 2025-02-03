@@ -4,16 +4,9 @@ from datetime import datetime
 from typing import Dict, List, Optional, TypedDict
 
 from rich.console import Console
-from sqlalchemy.orm import Session
 
 from weekend_activity.db import get_db
-from weekend_activity.models import (
-    Commit,
-    CommitSummary,
-    PullRequest,
-    PullRequestSummary,
-    WeekendReport,
-)
+from weekend_activity.models import Commit, PullRequest, WeekendReport
 
 console = Console()
 
@@ -33,7 +26,14 @@ class ActivityReporter:
         pass
 
     def _format_commit_summary(self, commit: Commit) -> str:
-        """Format a commit for the report."""
+        """Format a commit for the report.
+
+        Args:
+            commit: The commit to format
+
+        Returns:
+            Formatted commit summary
+        """
         lines = []
         lines.append(f"    - {commit.message.split('\n')[0]}")
         lines.append(f"      {commit.url}")
@@ -45,7 +45,14 @@ class ActivityReporter:
         return "\n".join(lines)
 
     def _format_pr_summary(self, pr: PullRequest) -> str:
-        """Format a pull request for the report."""
+        """Format a pull request for the report.
+
+        Args:
+            pr: The pull request to format
+
+        Returns:
+            Formatted PR summary
+        """
         lines = []
         lines.append(f"    - {pr.title}")
         lines.append(f"      {pr.url}")
@@ -62,10 +69,22 @@ class ActivityReporter:
         end_date: datetime,
         activity: Dict[str, List[Commit | PullRequest]],
     ) -> str:
-        """Generate a text report of weekend activity."""
+        """Generate a text report of weekend activity.
+
+        Args:
+            start_date: Start of the weekend
+            end_date: End of the weekend
+            activity: Dictionary of commits and PRs
+
+        Returns:
+            Formatted text report
+        """
         lines = [
             "Weekend Warriors Report",
-            f"Activity from {start_date.isoformat()} to {end_date.isoformat()}\n",
+            (
+                f"Activity from {start_date.isoformat()} "
+                f"to {end_date.isoformat()}\n"
+            ),
         ]
 
         # Group by user
@@ -108,10 +127,22 @@ class ActivityReporter:
         end_date: datetime,
         activity: Dict[str, List[Commit | PullRequest]],
     ) -> str:
-        """Generate a Slack-formatted report of weekend activity."""
+        """Generate a Slack-formatted report of weekend activity.
+
+        Args:
+            start_date: Start of the weekend
+            end_date: End of the weekend
+            activity: Dictionary of commits and PRs
+
+        Returns:
+            Formatted Slack report
+        """
         lines = [
             "🚀 *Weekend Warriors Report*",
-            f"_Activity from {start_date.isoformat()} to {end_date.isoformat()}_\n",
+            (
+                f"_Activity from {start_date.isoformat()} "
+                f"to {end_date.isoformat()}_\n"
+            ),
         ]
 
         # Group by user
@@ -153,7 +184,9 @@ class ActivityReporter:
                     lines.append(f"    - <{pr.url}|{pr.title}>")
                     if pr.summary:
                         lines.append(f"      _{pr.summary.summary}_")
-                        lines.append(f"      Impact: {pr.summary.impact_level.upper()}")
+                        lines.append(
+                            f"      Impact: {pr.summary.impact_level.upper()}"
+                        )
 
         return "\n".join(lines)
 
@@ -164,7 +197,17 @@ class ActivityReporter:
         report_text: str,
         sent_to_slack: bool = False,
     ) -> WeekendReport:
-        """Save the report to the database."""
+        """Save the report to the database.
+
+        Args:
+            start_date: Start of the weekend
+            end_date: End of the weekend
+            report_text: Generated report text
+            sent_to_slack: Whether the report was sent to Slack
+
+        Returns:
+            Created WeekendReport instance
+        """
         with get_db() as db:
             report = WeekendReport(
                 start_date=start_date,
@@ -178,6 +221,13 @@ class ActivityReporter:
             return report
 
     def get_report(self, report_id: int) -> Optional[WeekendReport]:
-        """Get a report from the database."""
+        """Get a report from the database.
+
+        Args:
+            report_id: ID of the report to retrieve
+
+        Returns:
+            WeekendReport instance if found, None otherwise
+        """
         with get_db() as db:
             return db.query(WeekendReport).filter_by(id=report_id).first()

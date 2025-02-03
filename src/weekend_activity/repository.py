@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from typing import Dict, List, Tuple
 
+from dotenv import load_dotenv
 from github import Github, GithubException
 from rich.console import Console
 from sqlalchemy.orm import Session
@@ -11,6 +12,9 @@ from sqlalchemy.orm import Session
 from weekend_activity.db import get_db
 from weekend_activity.models import Commit, PullRequest, Repository
 from weekend_activity.summarizer import summarize_commit, summarize_pr
+
+# Load environment variables from .env file
+load_dotenv()
 
 console = Console()
 
@@ -20,7 +24,13 @@ class GitHubManager:
 
     def __init__(self) -> None:
         """Initialize with GitHub token."""
-        self.github = Github(os.getenv("GITHUB_TOKEN"))
+        token = os.getenv("GITHUB_TOKEN")
+        if not token:
+            raise ValueError(
+                "GITHUB_TOKEN environment variable not set. "
+                "Please ensure you have a .env file with GITHUB_TOKEN set."
+            )
+        self.github = Github(token)
 
     def sync_repository(self, owner: str, name: str, db: Session) -> Repository:
         """Sync repository information to database."""

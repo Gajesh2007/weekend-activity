@@ -8,13 +8,13 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
-    """Base class for all models."""
+    """Define the base class for all models."""
 
     pass
 
 
 class Repository(Base):
-    """Repository model."""
+    """Define a GitHub repository."""
 
     __tablename__ = "repositories"
 
@@ -22,23 +22,28 @@ class Repository(Base):
     owner: Mapped[str] = mapped_column(String(100))
     name: Mapped[str] = mapped_column(String(100))
     full_name: Mapped[str] = mapped_column(String(201))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
     )
 
     commits: Mapped[list["Commit"]] = relationship(back_populates="repository")
     pull_requests: Mapped[list["PullRequest"]] = relationship(
-        back_populates="repository"
+        back_populates="repository",
     )
 
     def __repr__(self) -> str:
-        """String representation."""
+        """Return string representation."""
         return f"<Repository {self.full_name}>"
 
 
 class Commit(Base):
-    """Commit model."""
+    """Define a Git commit."""
 
     __tablename__ = "commits"
 
@@ -51,18 +56,23 @@ class Commit(Base):
     url: Mapped[str] = mapped_column(String(255))
     committed_at: Mapped[datetime] = mapped_column(DateTime)
     repository_id: Mapped[int] = mapped_column(ForeignKey("repositories.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
 
     repository: Mapped[Repository] = relationship(back_populates="commits")
-    summary: Mapped[Optional["CommitSummary"]] = relationship(back_populates="commit")
+    summary: Mapped[Optional["CommitSummary"]] = relationship(
+        back_populates="commit",
+    )
 
     def __repr__(self) -> str:
-        """String representation."""
+        """Return string representation."""
         return f"<Commit {self.sha[:7]} by {self.author_username}>"
 
 
 class PullRequest(Base):
-    """Pull request model."""
+    """Define a GitHub pull request."""
 
     __tablename__ = "pull_requests"
 
@@ -80,16 +90,16 @@ class PullRequest(Base):
 
     repository: Mapped[Repository] = relationship(back_populates="pull_requests")
     summary: Mapped[Optional["PullRequestSummary"]] = relationship(
-        back_populates="pull_request"
+        back_populates="pull_request",
     )
 
     def __repr__(self) -> str:
-        """String representation."""
+        """Return string representation."""
         return f"<PR #{self.number} by {self.author_username}>"
 
 
 class CommitSummary(Base):
-    """AI-generated summary for a commit."""
+    """Define an AI-generated summary for a commit."""
 
     __tablename__ = "commit_summaries"
 
@@ -97,37 +107,44 @@ class CommitSummary(Base):
     commit_id: Mapped[int] = mapped_column(ForeignKey("commits.id"), unique=True)
     summary: Mapped[str] = mapped_column(Text)
     impact_level: Mapped[str] = mapped_column(String(20))  # low, medium, high
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
 
     commit: Mapped[Commit] = relationship(back_populates="summary")
 
     def __repr__(self) -> str:
-        """String representation."""
+        """Return string representation."""
         return f"<CommitSummary for {self.commit.sha[:7]}>"
 
 
 class PullRequestSummary(Base):
-    """AI-generated summary for a pull request."""
+    """Define an AI-generated summary for a pull request."""
 
     __tablename__ = "pr_summaries"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     pull_request_id: Mapped[int] = mapped_column(
-        ForeignKey("pull_requests.id"), unique=True
+        ForeignKey("pull_requests.id"),
+        unique=True,
     )
     summary: Mapped[str] = mapped_column(Text)
     impact_level: Mapped[str] = mapped_column(String(20))  # low, medium, high
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
 
     pull_request: Mapped[PullRequest] = relationship(back_populates="summary")
 
     def __repr__(self) -> str:
-        """String representation."""
+        """Return string representation."""
         return f"<PRSummary for #{self.pull_request.number}>"
 
 
 class WeekendReport(Base):
-    """Generated weekend activity report."""
+    """Define a generated weekend activity report."""
 
     __tablename__ = "weekend_reports"
 
@@ -136,8 +153,11 @@ class WeekendReport(Base):
     end_date: Mapped[datetime] = mapped_column(DateTime)
     report_text: Mapped[str] = mapped_column(Text)
     sent_to_slack: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
 
     def __repr__(self) -> str:
-        """String representation."""
+        """Return string representation."""
         return f"<WeekendReport {self.start_date.date()} to {self.end_date.date()}>"

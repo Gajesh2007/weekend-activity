@@ -60,3 +60,5 @@ migrations/versions/
 
 # Testing
 .tox/
+
+config.yaml

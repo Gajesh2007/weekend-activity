@@ -16,7 +16,7 @@ A bot that tracks weekend activity (commits, PRs) on specified GitHub repositori
 1. Make sure you have Python 3.8+ and [Poetry](https://python-poetry.org/) installed
 2. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/weekend-activity.git
+   git clone https://github.com/Gajesh2007/weekend-activity.git
    cd weekend-activity
    ```
 3. Install dependencies:
