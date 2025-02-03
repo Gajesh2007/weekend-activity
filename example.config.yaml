@@ -1,0 +1,23 @@
+# Weekend Activity Tracker Configuration Example
+# Rename this file to config.yaml and update the values
+
+# List of repositories to track
+repositories:
+  - owner: "example-org"    # GitHub organization or username
+    repo: "example-repo"    # Repository name
+
+# Timezone for weekend detection (IANA timezone names)
+timezone: "UTC"
+
+# Slack notification settings
+slack:
+  channel: "#weekend-activity"
+  username: "Weekend Bot"
+  icon_emoji: ":rocket:"
+
+# Summary generation settings
+summary:
+  max_commits_per_user: 10
+  max_prs_per_user: 5
+  include_commit_messages: true
+  include_pr_titles: true
